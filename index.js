@@ -24,14 +24,14 @@ var db = new sqlite3.Database(dbFile, sqlite3.OPEN_READWRITE, function (err) {
     console.log("Opened database %s successfully", dbFile);
 });
 
-app.post('/registration', function (req, res, next) {
+app.get('/registration/:token', function (req, res, next) {
     db.serialize(function() {
 
         /* Return a message if the token is already in the database.
          * Otherwise, insert all the data into the database. */
         db.get("SELECT rowid AS id, token FROM users", function (err, row) {
             if (err) throw err;
-            if (row && (row.token === req.body.token)) {
+            if (row && (row.token === req.params.token)) {
                 res.send("Registration token already exists in database.");
                 db.all("SELECT rowid AS id, token FROM Users", function (err, rows) {
                     if (err) throw err;
@@ -44,12 +44,10 @@ app.post('/registration', function (req, res, next) {
     });
 }, function (req, res, next) {
     db.serialize(function() {
-        console.log("Token: " + req.body.token);
-        console.log("Frequency: " + req.body.frequency);
-        console.log("Server info: " + req.body.ip, req.body.port);
+        console.log("Token: " + req.params.token);
 
         var stmtUsers = db.prepare("INSERT INTO users VALUES (?)");
-        stmtUsers.run(req.body.token, [], function (err) {
+        stmtUsers.run(req.params.token, [], function (err) {
             if (err) throw err;
 
             stmtUsers.finalize();
@@ -59,35 +57,43 @@ app.post('/registration', function (req, res, next) {
             });
         });
 
-        var stmtFrequencies = db.prepare("INSERT INTO frequencies (frequency) VALUES($frequency)");
-        stmtFrequencies.run(
-            {
-                $frequency: req.body.frequency
-            }, function (err) {
-                if (err) throw err;
-                stmtFrequencies.finalize();
-                db.all("SELECT rowid AS id, frequency FROM frequencies", function (err, rows) {
+        res.send("Inserted new token into database.");
+});
+
+    app.post('/data', function (req, res, next) {
+        console.log("Frequency: " + req.body.frequency);
+        console.log("Server info: " + req.body.ip, req.body.port);
+        db.serialize(function () {
+            var stmtFrequencies = db.prepare("INSERT INTO frequencies (frequency) VALUES($frequency)");
+            stmtFrequencies.run(
+                {
+                    $frequency: req.body.frequency
+                }, function (err) {
                     if (err) throw err;
-                    console.log("FREQUENCIES: " + JSON.stringify(rows));
+                    stmtFrequencies.finalize();
+                    db.all("SELECT rowid AS id, frequency FROM frequencies", function (err, rows) {
+                        if (err) throw err;
+                        console.log("FREQUENCIES: " + JSON.stringify(rows));
+                    });
                 });
-            });
 
-        var stmtServers = db.prepare("INSERT INTO servers (ip, port) VALUES($ip, $port)");
-        stmtServers.run(
-            {
-                $ip: req.body.ip,
-                $port: req.body.port
-            }, function (err) {
-                if (err) throw err;
-
-                stmtServers.finalize();
-                db.all("SELECT rowid AS id, ip FROM servers", function (err, rows) {
+            var stmtServers = db.prepare("INSERT INTO servers (ip, port) VALUES($ip, $port)");
+            stmtServers.run(
+                {
+                    $ip: req.body.ip,
+                    $port: req.body.port
+                }, function (err) {
                     if (err) throw err;
-                    console.log("SERVERS: " + JSON.stringify(rows));
-                });
-            });
 
-        res.send("Inserted new token, frequency, & server into database.");
+                    stmtServers.finalize();
+                    db.all("SELECT rowid AS id, ip FROM servers", function (err, rows) {
+                        if (err) throw err;
+                        console.log("SERVERS: " + JSON.stringify(rows));
+                    });
+                });
+
+            res.send("Inserted frequency & server info into database.");
+        });
     });
 });
 
